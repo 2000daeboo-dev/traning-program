@@ -5,7 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#171C22">
 <title>트레이닝 · 바디빌딩 &amp; 러닝</title>
-<link rel="manifest" href="data:application/json,%7B%22name%22%3A%22Training%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23171C22%22%7D">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="트레이닝">
 <style>
   html, body { margin:0; padding:0; background:#171C22; }
   #boot { color:#8A97A4; font-family:system-ui,sans-serif; padding:36px 18px; font-size:14px; line-height:1.7; white-space:pre-line; word-break:break-all; }
@@ -595,12 +600,31 @@ function RestBar({ timer, setTimer }) {
   const [now, setNow] = useState(Date.now());
   const fired = useRef(false);
 
-  useEffect(() => { fired.current = false; }, [timer && timer.startedAt]);
+  const started = timer ? timer.startedAt : 0;
+
+  useEffect(() => { fired.current = false; }, [started]);
   useEffect(() => {
     if (!timer) return;
     const id = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(id);
   }, [timer]);
+
+  /* 화면이 꺼지면 브라우저가 타이머를 멈춰 알림이 늦는다. 쉬는 동안만 화면을 붙잡는다 */
+  useEffect(() => {
+    if (!started || !navigator.wakeLock) return;
+    let lock = null, done = false;
+    const acquire = () => navigator.wakeLock.request("screen")
+      .then((l) => { if (done) l.release().catch(() => {}); else lock = l; })
+      .catch(() => { /* 절전 모드 등에서는 거부된다 */ });
+    const onVis = () => { if (!done && document.visibilityState === "visible") acquire(); };
+    acquire();
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      done = true;
+      document.removeEventListener("visibilitychange", onVis);
+      if (lock) lock.release().catch(() => {});
+    };
+  }, [started]);
 
   useEffect(() => {
     if (!timer || fired.current || now < timer.endsAt) return;
@@ -1630,6 +1654,14 @@ function Settings({ data, patch, setData, unit }) {
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 
+</script>
+
+<script>
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("./sw.js").catch(function () { /* 오프라인 지원만 빠진다 */ });
+  });
+}
 </script>
 </body>
 </html>

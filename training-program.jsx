@@ -546,12 +546,31 @@ function RestBar({ timer, setTimer }) {
   const [now, setNow] = useState(Date.now());
   const fired = useRef(false);
 
-  useEffect(() => { fired.current = false; }, [timer && timer.startedAt]);
+  const started = timer ? timer.startedAt : 0;
+
+  useEffect(() => { fired.current = false; }, [started]);
   useEffect(() => {
     if (!timer) return;
     const id = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(id);
   }, [timer]);
+
+  /* 화면이 꺼지면 브라우저가 타이머를 멈춰 알림이 늦는다. 쉬는 동안만 화면을 붙잡는다 */
+  useEffect(() => {
+    if (!started || !navigator.wakeLock) return;
+    let lock = null, done = false;
+    const acquire = () => navigator.wakeLock.request("screen")
+      .then((l) => { if (done) l.release().catch(() => {}); else lock = l; })
+      .catch(() => { /* 절전 모드 등에서는 거부된다 */ });
+    const onVis = () => { if (!done && document.visibilityState === "visible") acquire(); };
+    acquire();
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      done = true;
+      document.removeEventListener("visibilitychange", onVis);
+      if (lock) lock.release().catch(() => {});
+    };
+  }, [started]);
 
   useEffect(() => {
     if (!timer || fired.current || now < timer.endsAt) return;
