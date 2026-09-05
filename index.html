@@ -216,13 +216,21 @@ const RUN = {
   long: { name: "롱런", zone: "easy", long: true, detail: "격주로 마지막 3–4km를 마라톤 페이스로" },
 };
 
+/* 기간은 달력 날짜가 아니라 프로그램 시작일로부터의 주 수다. 시작일을 옮기면 전체가 함께 움직인다 */
 const PHASES = [
-  { name: "유산소 기반기", from: "2026-09-01", to: "2026-12-31", km: [30, 45], goal: "10K 60분", focus: "질 세션 1회 + 스트라이드. 거리를 쌓는 시기", tempo: "임계 3×8분 (휴식 2분 조깅)", interval: "6×2분 (동시간 조깅 휴식)", long: [10, 14] },
-  { name: "임계 주력기", from: "2027-01-01", to: "2027-04-30", km: [45, 55], goal: "10K 56–57분", focus: "질 세션 2회로 증가", tempo: "임계 2×15분 (휴식 3분)", interval: "5×1km @레이스 페이스 (휴식 2분)", long: [14, 17] },
-  { name: "여름 유지기", from: "2027-05-01", to: "2027-08-31", km: [50, 55], goal: "10K 53–54분", focus: "더위로 페이스 저하. 강도 유지에 집중", tempo: "임계 25분 연속 또는 언덕 8×90초", interval: "5×1km @레이스 페이스", long: [15, 17] },
-  { name: "10K 특화기", from: "2027-09-01", to: "2027-11-30", km: [55, 60], goal: "10K 51분", focus: "VO2max + 레이스 페이스", tempo: "임계 25–30분 연속", interval: "4×1.2km 또는 3×2km @레이스 페이스", long: [16, 18] },
-  { name: "레이스 준비기", from: "2027-12-01", to: "2028-01-31", km: [45, 45], goal: "sub-50", focus: "거리 감량, 레이스 페이스 굳히기, 테이퍼", tempo: "레이스 페이스 3×2km (휴식 2분)", interval: "8×400m @레피티션", long: [12, 16] },
+  { name: "유산소 기반기", weeks: 17, km: [30, 45], goal: "10K 60분", focus: "질 세션 1회 + 스트라이드. 거리를 쌓는 시기", tempo: "임계 3×8분 (휴식 2분 조깅)", interval: "6×2분 (동시간 조깅 휴식)", long: [10, 14] },
+  { name: "임계 주력기", weeks: 17, km: [45, 55], goal: "10K 56–57분", focus: "질 세션 2회로 증가", tempo: "임계 2×15분 (휴식 3분)", interval: "5×1km @레이스 페이스 (휴식 2분)", long: [14, 17] },
+  { name: "여름 유지기", weeks: 18, km: [50, 55], goal: "10K 53–54분", focus: "더위로 페이스 저하. 강도 유지에 집중", tempo: "임계 25분 연속 또는 언덕 8×90초", interval: "5×1km @레이스 페이스", long: [15, 17] },
+  { name: "10K 특화기", weeks: 13, km: [55, 60], goal: "10K 51분", focus: "VO2max + 레이스 페이스", tempo: "임계 25–30분 연속", interval: "4×1.2km 또는 3×2km @레이스 페이스", long: [16, 18] },
+  { name: "레이스 준비기", weeks: 9, km: [45, 45], goal: "sub-50", focus: "거리 감량, 레이스 페이스 굳히기, 테이퍼", tempo: "레이스 페이스 3×2km (휴식 2분)", interval: "8×400m @레피티션", long: [12, 16] },
 ];
+
+const PHASE_START = [];
+PHASES.reduce((w, p, i) => { PHASE_START[i] = w; return w + p.weeks; }, 0);
+const TOTAL_WEEKS = PHASES.reduce((w, p) => w + p.weeks, 0);
+
+/* 웨이트 디로드와 러닝 감량주를 같은 주에 맞춘다 */
+const DELOAD_CYCLE = 5;
 
 const ZONES = {
   easy: { label: "이지 / 롱런", mult: [1.15, 1.23] },
@@ -260,10 +268,26 @@ const toSec = (str) => {
 const monday = (s) => { const d = parse(s); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return iso(d); };
 const weeksBetween = (a, b) => Math.round((parse(monday(b)) - parse(monday(a))) / 604800000);
 
-const phaseFor = (s) => {
-  const t = parse(s).getTime();
-  for (const p of PHASES) if (t >= parse(p.from).getTime() && t <= parse(p.to).getTime()) return p;
-  return t < parse(PHASES[0].from).getTime() ? PHASES[0] : PHASES[PHASES.length - 1];
+const programWeek = (st, s) => weeksBetween(st.startDate, s);
+
+const isDeload = (st, s) => {
+  const w = programWeek(st, s);
+  return w >= 0 && w % DELOAD_CYCLE === DELOAD_CYCLE - 1;
+};
+
+const phaseAt = (st, s) => {
+  const w = programWeek(st, s);
+  if (w < 0) return { phase: PHASES[0], idx: 0, week: 0, state: "before" };
+  const last = PHASES.length - 1;
+  if (w >= TOTAL_WEEKS) return { phase: PHASES[last], idx: last, week: PHASES[last].weeks - 1, state: "done" };
+  let i = last;
+  while (i > 0 && w < PHASE_START[i]) i--;
+  return { phase: PHASES[i], idx: i, week: w - PHASE_START[i], state: "active" };
+};
+
+const phaseRange = (st, i) => {
+  const m = monday(st.startDate);
+  return [addDays(m, PHASE_START[i] * 7), addDays(m, (PHASE_START[i] + PHASES[i].weeks) * 7 - 1)];
 };
 const paceRange = (tenK, zone) => {
   const b = tenK / 10, [x, y] = ZONES[zone].mult;
@@ -271,12 +295,12 @@ const paceRange = (tenK, zone) => {
 };
 const e1rm = (w, r) => (w > 0 && r > 0 ? w * (1 + r / 30) : 0);
 
-const weeklyKmTarget = (s) => {
-  const p = phaseFor(s);
-  const total = Math.max(1, weeksBetween(p.from, p.to));
-  const idx = Math.max(0, Math.min(total, weeksBetween(p.from, s)));
-  const raw = p.km[0] + (p.km[1] - p.km[0]) * (idx / total);
-  return Math.round(raw * (idx % 4 === 3 ? 0.78 : 1));
+const weeklyKmTarget = (st, s) => {
+  const { phase, week, state } = phaseAt(st, s);
+  if (state === "before") return phase.km[0];
+  const span = Math.max(1, phase.weeks - 1);
+  const raw = phase.km[0] + (phase.km[1] - phase.km[0]) * Math.min(1, week / span);
+  return Math.round(raw * (isDeload(st, s) ? 0.78 : 1));
 };
 
 /* ── 단위 ── 입력한 값과 단위를 그대로 보존하고 표시할 때만 환산한다 */
@@ -749,9 +773,10 @@ function Today({ data, patch, tenK, date, setDate, startRest }) {
   const plan = data.program.week[dow] || { lift: "", run: "none" };
   const session = plan.lift ? data.program.sessions[plan.lift] : null;
   const run = RUN[plan.run] || RUN.none;
-  const phase = phaseFor(date);
+  const ph = phaseAt(data.settings, date);
+  const phase = ph.phase;
   const pw = weeksBetween(data.settings.startDate, date) + 1;
-  const deload = pw > 0 && pw % 5 === 0;
+  const deload = isDeload(data.settings, date);
 
   const day = data.log[date] || {};
   const swap = day.swap || {};
@@ -816,7 +841,7 @@ function Today({ data, patch, tenK, date, setDate, startRest }) {
             <span className="tp-dow cond">{DOW[dow]}</span>
             <span className="tp-md cond">{parse(date).getMonth() + 1}월 {parse(date).getDate()}일</span>
           </div>
-          <div className="tp-wk cond">{pw > 0 ? `${pw}주차` : "시작 전"}<br />{phase.name}</div>
+          <div className="tp-wk cond">{pw > 0 ? `${pw}주차` : "시작 전"}<br />{ph.state === "done" ? "계획 완료" : phase.name}</div>
         </div>
         <div className="tp-title">
           <div>
@@ -966,8 +991,9 @@ function Week({ data, date, setDate, setTab }) {
   const mon = monday(date);
   const days = Array.from({ length: 7 }, (_, i) => addDays(mon, i));
   const today = iso(new Date());
-  const target = weeklyKmTarget(mon);
-  const phase = phaseFor(mon);
+  const target = weeklyKmTarget(data.settings, mon);
+  const ph = phaseAt(data.settings, mon);
+  const phase = ph.phase;
   const pw = weeksBetween(data.settings.startDate, mon) + 1;
 
   const km = days.reduce((s, d) => { const r = data.log[d] && data.log[d].run; return s + (r && r.d ? Number(r.km) || 0 : 0); }, 0);
@@ -989,8 +1015,12 @@ function Week({ data, date, setDate, setTab }) {
             <span className="tp-md cond">{parse(mon).getMonth() + 1}/{parse(mon).getDate()} – {parse(addDays(mon, 6)).getMonth() + 1}/{parse(addDays(mon, 6)).getDate()}</span>
           </div>
         </div>
-        <div className="tp-sub">{phase.name} · {phase.focus}</div>
+        <div className="tp-sub">{ph.state === "done" ? "계획한 일정이 끝났습니다 · 유지 단계" : `${phase.name} · ${phase.focus}`}</div>
       </header>
+
+      {isDeload(data.settings, mon) && (
+        <p className="tp-banner iron">감량 주입니다. 웨이트는 세트를 절반으로 줄이고, 러닝 목표 거리도 약 22% 낮췄습니다.</p>
+      )}
 
       <div className="tp-mets">
         <div className="tp-met"><div className="tp-metv">{km.toFixed(0)}<small> / {target}</small></div><div className="tp-metl">주간 거리 km</div></div>
@@ -1027,7 +1057,7 @@ function Week({ data, date, setDate, setTab }) {
       <div className="tp-sec">
         <h2 className="tp-sech">이번 주 주의점</h2>
         <p className="tp-secp">
-          거리 증가는 3주 증량 뒤 1주 감량입니다. 감량 주에는 목표가 자동으로 약 22% 줄어듭니다.
+          거리 증가는 4주 증량 뒤 1주 감량입니다. 감량 주에는 웨이트 세트와 러닝 목표가 함께 줄어듭니다.
           정강이 앞쪽 통증, 아침 아킬레스 경직, 무릎 앞쪽 통증이 이틀 이상 이어지면 거리를 즉시 30% 줄이세요.
           탄수화물과 단백질을 충분히 유지하고 감량기를 두지 마세요.
         </p>
@@ -1041,7 +1071,8 @@ function Week({ data, date, setDate, setTab }) {
 function Running({ data, patch, tenK }) {
   const [d, setD] = useState(iso(new Date()));
   const [t, setT] = useState("");
-  const phase = phaseFor(iso(new Date()));
+  const ph = phaseAt(data.settings, iso(new Date()));
+  const phase = ph.phase;
 
   const add = () => {
     const sec = toSec(t);
@@ -1069,6 +1100,13 @@ function Running({ data, patch, tenK }) {
         </tbody></table>
       </div>
 
+      {ph.state === "done" && (
+        <p className="tp-banner iron">
+          계획한 {TOTAL_WEEKS}주가 모두 끝났습니다. 아래 내용은 마지막 시기 기준입니다.
+          새 사이클을 시작하려면 설정에서 프로그램 시작일을 오늘로 옮기세요.
+        </p>
+      )}
+
       <div className="tp-sec">
         <h2 className="tp-sech">이번 시기의 질 세션</h2>
         <p className="tp-secp">{phase.name} · {phase.focus}</p>
@@ -1081,17 +1119,22 @@ function Running({ data, patch, tenK }) {
 
       <div className="tp-sec">
         <h2 className="tp-sech">로드맵</h2>
-        <p className="tp-secp">2028년 1월 sub-50까지 다섯 시기.</p>
+        <p className="tp-secp">
+          시작일부터 {TOTAL_WEEKS}주, 다섯 시기입니다. 지금 설정이면 {phaseRange(data.settings, PHASES.length - 1)[1]}에 sub-50 목표로 끝납니다.
+        </p>
         <table className="tp-tbl">
           <thead><tr><th>시기</th><th>주간 거리</th><th style={{ textAlign: "right" }}>목표</th></tr></thead>
           <tbody>
-            {PHASES.map((p) => (
-              <tr key={p.name} className={p.name === phase.name ? "now" : ""}>
-                <td>{p.name}<br /><span style={{ color: "var(--dim)", fontSize: 12 }}>{p.from.slice(2, 7)}–{p.to.slice(2, 7)}</span></td>
-                <td className="num">{p.km[0] === p.km[1] ? p.km[0] : `${p.km[0]}→${p.km[1]}`}</td>
-                <td className="num" style={{ textAlign: "right" }}>{p.goal}</td>
-              </tr>
-            ))}
+            {PHASES.map((p, i) => {
+              const [f, t2] = phaseRange(data.settings, i);
+              return (
+                <tr key={p.name} className={i === ph.idx && ph.state === "active" ? "now" : ""}>
+                  <td>{p.name}<br /><span style={{ color: "var(--dim)", fontSize: 12 }}>{f.slice(2, 7)}–{t2.slice(2, 7)} · {p.weeks}주</span></td>
+                  <td className="num">{p.km[0] === p.km[1] ? p.km[0] : `${p.km[0]}→${p.km[1]}`}</td>
+                  <td className="num" style={{ textAlign: "right" }}>{p.goal}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -1203,8 +1246,8 @@ function History({ data, unit }) {
     Object.entries(data.log).forEach(([d, day]) => {
       if (day.run && day.run.d && Number(day.run.km) > 0) w[monday(d)] = (w[monday(d)] || 0) + Number(day.run.km);
     });
-    return Object.keys(w).sort().map((k) => ({ week: k.slice(5), km: +w[k].toFixed(1), target: weeklyKmTarget(k) }));
-  }, [data.log]);
+    return Object.keys(w).sort().map((k) => ({ week: k.slice(5), km: +w[k].toFixed(1), target: weeklyKmTarget(data.settings, k) }));
+  }, [data.log, data.settings]);
 
   const totalKm = mileage.reduce((s, x) => s + x.km, 0);
   const sessions = Object.values(data.log).filter((d) => d.lift && Object.values(d.lift).some((s) => s.some((x) => x && x.d))).length;
@@ -1586,7 +1629,23 @@ function Settings({ data, patch, setData, unit }) {
         <div className="tp-f">
           <label htmlFor="sd">프로그램 시작일</label>
           <input id="sd" type="date" value={s.startDate} onChange={(e) => patch((d) => { d.settings.startDate = e.target.value; })} />
-          <small>주차와 디로드 주기(4주 누적 + 1주 디로드)의 기준입니다. 월요일로 맞추세요.</small>
+          <small>
+            주차, 디로드({DELOAD_CYCLE - 1}주 누적 + 1주 감량), 러닝 시기가 모두 이 날짜를 기준으로 계산됩니다. 월요일로 맞추세요.
+            지금 설정이면 {phaseRange(s, PHASES.length - 1)[1]}에 전체 {TOTAL_WEEKS}주가 끝납니다.
+          </small>
+        </div>
+
+        <div className="tp-f">
+          <label>일정 미루기</label>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {[1, 2, 4].map((n) => (
+              <button key={n} className="tp-btn sm"
+                onClick={() => patch((d) => { d.settings.startDate = addDays(d.settings.startDate, n * 7); })}>+{n}주</button>
+            ))}
+            <button className="tp-btn sm"
+              onClick={() => patch((d) => { d.settings.startDate = addDays(d.settings.startDate, -7); })}>−1주</button>
+          </div>
+          <small>부상이나 사정으로 쉬었을 때 누르세요. 시작일이 밀리면서 러닝 시기와 디로드 주기가 통째로 따라옵니다. 이미 남긴 기록은 그대로입니다.</small>
         </div>
 
         <div className="tp-f">
