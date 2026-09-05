@@ -327,8 +327,10 @@ const CSS = `
 .tp *, .tp *::before, .tp *::after { box-sizing: border-box; }
 .tp {
   --ink:#171C22; --panel:#212832; --panel2:#1B2129; --line:#2E3742;
-  --paper:#E8EBED; --muted:#8A97A4; --dim:#5C6874;
-  --iron:#D8DEE4; --pulse:#FF4D2E;
+  /* --dim 은 12px 안팎의 작은 글씨에 두루 쓰인다. 가장 밝은 배경(--panel2) 대비 4.5:1 아래로 내리지 말 것 */
+  --paper:#E8EBED; --muted:#8A97A4; --dim:#7F8C99;
+  /* --pulse-lift 는 --panel 처럼 밝은 배경 위에 강조색 글씨를 올릴 때 쓴다 */
+  --iron:#D8DEE4; --pulse:#FF4D2E; --pulse-lift:#FF6A50;
   font-family:'Barlow',system-ui,-apple-system,sans-serif;
   background:var(--ink); color:var(--paper);
   min-height:100vh; padding-bottom:78px; -webkit-font-smoothing:antialiased;
@@ -393,7 +395,7 @@ const CSS = `
 .tp-unit { font-size:12px; color:var(--dim); flex-shrink:0; }
 .tp-chk { width:40px; height:38px; flex-shrink:0; border-radius:6px; border:1px solid var(--line); background:var(--panel2); color:var(--dim); font-size:17px; display:flex; align-items:center; justify-content:center; }
 .tp-chk.on { background:var(--iron); border-color:var(--iron); color:var(--ink); }
-.tp-row.run .tp-chk.on { background:var(--pulse); border-color:var(--pulse); color:#fff; }
+.tp-row.run .tp-chk.on { background:var(--pulse); border-color:var(--pulse); color:var(--ink); }
 
 /* 러닝 */
 .tp-runhead { display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
@@ -421,6 +423,7 @@ const CSS = `
 .tp-dayinfo { flex:1; min-width:0; }
 .tp-daylift { font-size:15px; font-weight:600; display:block; }
 .tp-dayrun { font-size:13px; color:var(--pulse); margin-top:2px; display:block; }
+.tp-day.today .tp-dayrun { color:var(--pulse-lift); }
 .tp-dots { display:flex; gap:5px; flex-shrink:0; }
 .tp-dot { width:9px; height:9px; border-radius:50%; border:1.5px solid var(--line); }
 .tp-dot.lift.on { background:var(--iron); border-color:var(--iron); }
@@ -441,7 +444,7 @@ const CSS = `
 .tp-f small { font-size:12px; color:var(--dim); line-height:1.55; }
 .tp-btn { padding:11px 16px; border-radius:8px; border:1px solid var(--line); background:var(--panel); color:var(--paper); font-size:14.5px; font-weight:600; }
 .tp-btn:hover { border-color:var(--dim); }
-.tp-btn.hot { background:var(--pulse); border-color:var(--pulse); color:#fff; }
+.tp-btn.hot { background:var(--pulse); border-color:var(--pulse); color:var(--ink); }
 .tp-btn.sm { padding:6px 11px; font-size:13px; }
 .tp-btn.danger:hover { border-color:var(--pulse); color:var(--pulse); }
 label.tp-btn { display:inline-flex; align-items:center; cursor:pointer; }
@@ -483,6 +486,7 @@ label.tp-btn input[type=file] { display:none; }
 .tp-opt.on { background:var(--panel); }
 .tp-optn { flex:1; font-size:15.5px; font-weight:500; min-width:0; }
 .tp-optp { font-size:12px; color:var(--dim); flex-shrink:0; }
+.tp-opt:hover .tp-optp, .tp-opt.on .tp-optp { color:var(--muted); }
 .tp-sheetf { padding:12px 18px calc(12px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); display:flex; gap:8px; flex-shrink:0; }
 
 /* 휴식 타이머 */
@@ -551,7 +555,8 @@ function Picker({ current, custom, onPick, onClose, onRevert, title, hint, taken
           {list.map((e, i) => (
             <button key={e.id} className={`tp-opt ${e.id === current ? "on" : ""}`} onClick={() => onPick({ id: e.id })}>
               <span className="tp-optn">{e.name}</span>
-              <span className="tp-optp">{i < sameCount ? PAT[e.pattern] : (PAT[e.pattern] || "")}</span>
+              {/* 같은 움직임 패턴 = 바로 대체 가능한 후보라 눈에 띄게 둔다 */}
+              <span className="tp-optp" style={i < sameCount ? { color: "var(--pulse-lift)" } : undefined}>{PAT[e.pattern] || ""}</span>
             </button>
           ))}
           {!list.length && !canCreate && <div className="tp-empty">일치하는 종목이 없습니다.</div>}
@@ -1017,12 +1022,19 @@ function Week({ data, date, setDate, setTab }) {
 function Running({ data, patch, tenK }) {
   const [d, setD] = useState(iso(new Date()));
   const [t, setT] = useState("");
+  const [err, setErr] = useState("");
   const ph = phaseAt(data.settings, iso(new Date()));
   const phase = ph.phase;
 
+  /* 이 값 하나가 모든 훈련 페이스의 기준이라, 형식을 잘못 넣으면 앱 전체가 어긋난다 */
   const add = () => {
     const sec = toSec(t);
-    if (!sec) return;
+    if (!sec) { setErr("1:02:30 또는 62:30 형식으로 입력하세요."); return; }
+    if (sec < 1200 || sec > 9000) {
+      setErr(`${hms(sec)}는 10K 기록으로 보기 어렵습니다. 시:분:초 순서가 맞는지 확인하세요.`);
+      return;
+    }
+    setErr("");
     patch((x) => { x.tt.push({ date: d, sec }); x.tt.sort((a, b) => a.date.localeCompare(b.date)); });
     setT("");
   };
@@ -1112,19 +1124,21 @@ function Running({ data, patch, tenK }) {
           </div>
           <div className="tp-f" style={{ flex: 1, marginBottom: 0 }}>
             <label htmlFor="ttt">10K 기록</label>
-            <input id="ttt" type="text" inputMode="numeric" placeholder="1:02:30" value={t} onChange={(e) => setT(e.target.value)} />
+            <input id="ttt" type="text" inputMode="numeric" placeholder="1:02:30" value={t}
+              onChange={(e) => { setT(e.target.value); if (err) setErr(""); }} />
           </div>
           <button className="tp-btn hot" onClick={add}>추가</button>
         </div>
+        {err && <p className="tp-secp" style={{ color: "var(--pulse)", marginTop: -8, marginBottom: 16 }}>{err}</p>}
         <table className="tp-tbl"><tbody>
-          {[...data.tt].reverse().map((x, i) => (
+          {data.tt.map((x, i) => [x, i]).reverse().map(([x, i]) => (
             <tr key={i}>
               <td>{x.date}</td>
               <td className="num">{hms(x.sec)}</td>
               <td className="num" style={{ color: "var(--muted)" }}>{mmss(x.sec / 10)}/km</td>
               <td style={{ textAlign: "right" }}>
                 <button className="tp-btn sm danger"
-                  onClick={() => patch((y) => { y.tt = y.tt.filter((z) => !(z.date === x.date && z.sec === x.sec)); })}>삭제</button>
+                  onClick={() => patch((y) => { y.tt.splice(i, 1); })}>삭제</button>
               </td>
             </tr>
           ))}
@@ -1154,7 +1168,9 @@ function History({ data, unit }) {
         const topKg = Math.max(...done.map((s) => setKg(s)));
         const volKg = done.reduce((a, s) => a + setKg(s) * Number(s.r), 0);
         const reps = done.reduce((a, s) => a + Number(s.r), 0);
-        (m[id] = m[id] || []).push({ date: d, bestKg, topKg, volKg, sets: done.length, reps, detail: done });
+        /* Epley 공식은 12회를 넘어가면 오차가 커진다 */
+        const hiRep = done.some((s) => Number(s.r) > 12);
+        (m[id] = m[id] || []).push({ date: d, bestKg, topKg, volKg, sets: done.length, reps, hiRep, detail: done });
       });
     });
     return m;
@@ -1171,7 +1187,7 @@ function History({ data, unit }) {
     const peak = Math.max(...h.map((x) => x.bestKg));
     const u = unitOf(data, id);
     return {
-      id, name: name(id), n: h.length, last: last.date, u,
+      id, name: name(id), n: h.length, last: last.date, u, hiRep: h.some((x) => x.hiRep),
       e1rm: fromKg(last.bestKg, u), peak: fromKg(peak, u), chg,
       stale: last.bestKg < peak * 0.98,
     };
@@ -1234,7 +1250,10 @@ function History({ data, unit }) {
                       {o.n}회 · {o.last.slice(5)}{o.stale ? " · 정체" : ""}
                     </div>
                   </td>
-                  <td className="num">{o.e1rm.toFixed(1)}<span style={{ color: "var(--muted)", fontSize: 11, fontWeight: 500 }}> {UL(o.u)}</span></td>
+                  <td className="num">
+                    {o.e1rm.toFixed(1)}<span style={{ color: "var(--muted)", fontSize: 11, fontWeight: 500 }}> {UL(o.u)}</span>
+                    {o.hiRep && <span style={{ color: "var(--muted)" }} title="12회를 넘는 세트 포함">*</span>}
+                  </td>
                   <td className="num" style={{ color: "var(--muted)" }}>{o.peak.toFixed(1)}</td>
                   <td className={`num ${o.chg >= 0 ? "tp-up" : "tp-down"}`} style={{ textAlign: "right" }}>
                     {o.chg >= 0 ? "+" : ""}{o.chg.toFixed(1)}%
@@ -1243,7 +1262,10 @@ function History({ data, unit }) {
               ))}
             </tbody>
           </table>
-          <p className="tp-secp" style={{ marginTop: 14 }}>추정 1RM은 Epley 공식(중량 × (1 + 반복/30))입니다. 단위는 종목마다 구성 탭에서 지정한 값을 따릅니다.</p>
+          <p className="tp-secp" style={{ marginTop: 14 }}>
+            추정 1RM은 Epley 공식(중량 × (1 + 반복/30))입니다. 단위는 종목마다 구성 탭에서 지정한 값을 따릅니다.
+            <br />* 표시는 12회를 넘는 세트가 섞인 종목입니다. 이 구간에서는 공식의 오차가 커지므로 절대값보다 추세와 세션 볼륨을 보세요.
+          </p>
         </div>
       )}
 
