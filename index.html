@@ -448,6 +448,9 @@ const CSS = `
 .tp-fld { flex:1; display:flex; align-items:center; gap:4px; min-width:0; }
 .tp-unit { font-size:12px; color:var(--dim); flex-shrink:0; }
 .tp-chk { width:40px; height:38px; flex-shrink:0; border-radius:6px; border:1px solid var(--line); background:var(--panel2); color:var(--dim); font-size:17px; display:flex; align-items:center; justify-content:center; }
+.tp-addset { display:flex; gap:8px; margin-top:8px; }
+.tp-addset button { background:none; border:1px dashed var(--line); color:var(--muted); border-radius:6px; padding:7px 12px; font-size:13px; font-weight:600; }
+.tp-addset button:hover { border-color:var(--dim); color:var(--paper); }
 .tp-chk.on { background:var(--iron); border-color:var(--iron); color:var(--ink); }
 .tp-row.run .tp-chk.on { background:var(--pulse); border-color:var(--pulse); color:var(--ink); }
 
@@ -799,7 +802,9 @@ function Today({ data, patch, tenK, date, setDate, startRest }) {
     });
   }, [session, swap, deload, data.custom]);
 
-  const totalSets = exList.reduce((a, e) => a + e.sets, 0);
+  /* 그날 기록 배열이 계획보다 길면 그만큼 세트를 더 한 것이다 */
+  const setsOf = (e) => Math.max(e.sets, (liftLog[e.id] || []).length);
+  const totalSets = exList.reduce((a, e) => a + setsOf(e), 0);
   const doneSets = exList.reduce((a, e) => a + (liftLog[e.id] || []).filter((x) => x && x.d).length, 0);
 
   const setVal = (exId, i, field, v) => patch((d) => {
@@ -809,6 +814,19 @@ function Today({ data, patch, tenK, date, setDate, startRest }) {
     while (arr.length <= i) arr.push({ w: "", r: "", d: false });
     arr[i][field] = v;
     if (field === "w") arr[i].u = unitOf(d, exId);
+  });
+
+  /* 세트 추가는 그날 하루만 적용된다. 프로그램의 계획 세트 수는 건드리지 않는다 */
+  const addSet = (exId, planned) => patch((d) => {
+    const day = d.log[date] = d.log[date] || {};
+    const lift = day.lift = day.lift || {};
+    const arr = lift[exId] = lift[exId] || [];
+    while (arr.length < planned) arr.push({ w: "", r: "", d: false });
+    arr.push({ w: "", r: "", d: false });
+  });
+  const removeSet = (exId, planned) => patch((d) => {
+    const arr = ((d.log[date] || {}).lift || {})[exId];
+    if (arr && arr.length > planned) arr.pop();
   });
 
   const runSet = (field, v) => patch((d) => {
@@ -870,7 +888,7 @@ function Today({ data, patch, tenK, date, setDate, startRest }) {
       {exList.map((e) => (
         <Exercise key={e.slotId} ex={e} log={liftLog[e.id] || []} date={date} allLog={data.log}
           unit={unitOf(data, e.id)} onChange={setVal} onSwap={() => setPick(e.slotId)} startRest={startRest}
-          autoRest={data.settings.autoRest} />
+          autoRest={data.settings.autoRest} onAddSet={addSet} onRemoveSet={removeSet} />
       ))}
 
       <div className={`tp-row run ${day.run && day.run.d ? "done" : ""}`}>
@@ -915,8 +933,15 @@ function Today({ data, patch, tenK, date, setDate, startRest }) {
   );
 }
 
-function Exercise({ ex, log, date, allLog, unit, onChange, onSwap, startRest, autoRest }) {
+function Exercise({ ex, log, date, allLog, unit, onChange, onSwap, startRest, autoRest, onAddSet, onRemoveSet }) {
   const U = UL(unit);
+  const count = Math.max(ex.sets, log.length);
+  const [confirmDel, setConfirmDel] = useState(false);
+  useEffect(() => { setConfirmDel(false); }, [count, date]);
+
+  /* 빈 세트는 바로 빼되, 기록이 든 세트는 한 번 더 묻는다 */
+  const last = log[count - 1];
+  const lastHasData = !!(last && (last.w !== "" || last.r !== "" || last.d));
 
   const prev = useMemo(() => {
     const ds = Object.keys(allLog).filter((d) => d < date && allLog[d].lift && allLog[d].lift[ex.id]).sort().reverse();
@@ -938,24 +963,27 @@ function Exercise({ ex, log, date, allLog, unit, onChange, onSwap, startRest, au
 
   const toggle = (i, on) => {
     onChange(ex.id, i, "d", on);
-    if (on && autoRest && i < ex.sets - 1) startRest(`${ex.name} ${i + 1}세트 후`, ex.rest);
+    if (on && autoRest && i < count - 1) startRest(`${ex.name} ${i + 1}세트 후`, ex.rest);
   };
 
   return (
-    <div className={`tp-row ${doneCount === ex.sets ? "done" : ""}`}>
+    <div className={`tp-row ${doneCount === count ? "done" : ""}`}>
       <div className="tp-exhead">
         <button className="tp-exname" onClick={onSwap} aria-label={`${ex.name} 종목 바꾸기`}>
           {ex.name}
           {ex.swapped && <span className="tp-swapped">대체</span>}
         </button>
-        <span className="tp-scheme">{ex.lo === ex.hi ? ex.lo : `${ex.lo}–${ex.hi}`} × {ex.sets}</span>
+        <span className="tp-scheme">
+          {ex.lo === ex.hi ? ex.lo : `${ex.lo}–${ex.hi}`} × {ex.sets}
+          {count > ex.sets && <span style={{ color: "var(--pulse)" }}> +{count - ex.sets}</span>}
+        </span>
       </div>
       <div className="tp-meta">
         {ex.note && <span>{ex.note}</span>}
         <button onClick={() => startRest(ex.name, ex.rest)}>휴식 {mmss(ex.rest)}</button>
       </div>
       <div className="tp-sets">
-        {Array.from({ length: ex.sets }).map((_, i) => {
+        {Array.from({ length: count }).map((_, i) => {
           const s = log[i] || { w: "", r: "", d: false };
           return (
             <div className="tp-set" key={i}>
@@ -976,6 +1004,17 @@ function Exercise({ ex, log, date, allLog, unit, onChange, onSwap, startRest, au
             </div>
           );
         })}
+      </div>
+      <div className="tp-addset">
+        <button onClick={() => onAddSet(ex.id, ex.sets)} aria-label={`${ex.name} 세트 추가`}>＋ 세트</button>
+        {count > ex.sets && (
+          <button aria-label={`${ex.name} 마지막 세트 빼기`}
+            style={confirmDel ? { borderColor: "var(--pulse)", color: "var(--pulse)" } : undefined}
+            onClick={() => {
+              if (lastHasData && !confirmDel) { setConfirmDel(true); return; }
+              onRemoveSet(ex.id, ex.sets);
+            }}>{confirmDel ? "기록이 지워집니다" : "마지막 세트 빼기"}</button>
+        )}
       </div>
       {prev ? (
         <div className="tp-prev">
