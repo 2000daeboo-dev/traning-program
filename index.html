@@ -83,7 +83,7 @@ const EXLIB = [
 
   ["latpull", "랫풀다운", "vpull", 2.5], ["latpulln", "뉴트럴그립 랫풀다운", "vpull", 2.5],
   ["pullup", "턱걸이 (풀업)", "vpull", 2.5, true], ["chinup", "친업", "vpull", 2.5, true],
-  ["assistpull", "어시스트 풀업", "vpull", 2.5], ["sapull", "스트레이트암 풀다운", "vpull", 1.25],
+  ["assistpull", "어시스트 풀업", "vpull", 2.5, false, true], ["sapull", "스트레이트암 풀다운", "vpull", 1.25],
 
   ["brow", "바벨 로우", "hpull", 2.5], ["pendlay", "펜들레이 로우", "hpull", 2.5],
   ["dbrow", "덤벨 원암 로우", "hpull", 2], ["csrow", "체스트 서포티드 로우", "hpull", 2.5],
@@ -127,7 +127,7 @@ const EXLIB = [
   ["legraise", "행잉 레그레이즈", "core", 0, true], ["cablecrunch", "케이블 크런치", "core", 2.5],
   ["plank", "플랭크", "core", 0, true], ["sideplank", "사이드 플랭크", "core", 0, true],
   ["abwheel", "앱 휠", "core", 0, true], ["pallof", "팰로프 프레스", "core", 1.25],
-].map(([id, name, pattern, inc, bw]) => ({ id, name, pattern, inc, bw: !!bw }));
+].map(([id, name, pattern, inc, bw, assist]) => ({ id, name, pattern, inc, bw: !!bw, assist: !!assist }));
 
 const LIBMAP = Object.fromEntries(EXLIB.map((e) => [e.id, e]));
 
@@ -152,7 +152,7 @@ const TIERS = {
 
 const slot = (tier, id, sets, lo, hi, rest, note) => {
   const l = LIBMAP[id];
-  return { id, tier, name: l.name, pattern: l.pattern, inc: l.inc, bw: l.bw, sets, lo, hi, rest, note: note || "" };
+  return { id, tier, name: l.name, pattern: l.pattern, inc: l.inc, bw: l.bw, assist: l.assist, sets, lo, hi, rest, note: note || "" };
 };
 const t1 = (id, rest, note) => slot("T1", id, T1_WAVE.length, 1, 5, rest, note);
 
@@ -165,11 +165,12 @@ const DEFAULT_PROGRAM = () => ({
         slot("T2", "cablerow", 3, 10, 12, 120),
         slot("T3", "latraise", 3, 15, 20, 60),
         slot("T3", "pushdown", 2, 12, 15, 60),
+        slot("T3", "pallof", 2, 12, 15, 45, "코어 항회전"),
       ],
     },
     upperB: {
       name: "상체 B", sub: "등 너비 · 수직 당기기", ex: [
-        t1("latpull", 180),
+        t1("assistpull", 180, "보조중량은 작을수록 무겁다"),
         slot("T2", "seatdbp", 3, 10, 12, 120),
         slot("T2", "cfly", 3, 12, 15, 75),
         slot("T3", "reardelt", 3, 15, 20, 60),
@@ -179,12 +180,12 @@ const DEFAULT_PROGRAM = () => ({
     lower: {
       name: "하체", sub: "머신 중심", ex: [
         t1("hack", 240, "스트렝스 앵커"),
+        slot("T2", "rdl", 3, 8, 12, 150, "러닝 있는 주엔 실패까지 가지 말 것"),
         slot("T2", "seatcurl", 3, 10, 12, 120, "무겁게"),
-        slot("T2", "legpress", 3, 12, 15, 120, "발 낮게 = 사두 강조"),
-        slot("T3", "legext", 3, 15, 20, 75),
+        slot("T2", "legpress", 2, 12, 15, 120, "발 낮게 = 사두 강조"),
+        slot("T3", "lyingcurl", 2, 12, 15, 75),
         slot("T3", "abduct", 3, 15, 20, 60, "부상 예방 · 생략 금지"),
         slot("T3", "calfst", 3, 10, 15, 90),
-        slot("T3", "legraise", 3, 10, 15, 60, "맨몸 · 중량 0"),
       ],
     },
     upperC: {
@@ -194,6 +195,7 @@ const DEFAULT_PROGRAM = () => ({
         slot("T2", "csrow", 3, 10, 12, 120),
         slot("T3", "cablelat", 3, 15, 20, 60),
         slot("T3", "cablecurl", 2, 12, 15, 60),
+        slot("T3", "legraise", 3, 10, 15, 60, "맨몸 · 중량 0"),
       ],
     },
     upperD: {
@@ -340,6 +342,9 @@ const tmOf = (d, id) => Number((d.tm && d.tm[id]) || 0);
 const roundTo = (v, step) => (step > 0 ? Math.round(v / step) * step : Math.round(v * 2) / 2);
 /* AMRAP 개수가 많을수록 크게 올린다. 증량 폭은 그 종목의 원판 단위(inc)를 배수로 쓴다 */
 const tmBump = (reps, inc) => (reps <= 1 ? 0 : reps <= 3 ? inc : reps <= 5 ? inc * 2 : inc * 3);
+const bwKgOf = (d) => (d.settings.bw ? toKg(d.settings.bw, d.settings.bwU || "kg") : 0);
+/* 어시스트 머신은 숫자가 클수록 쉬워진다. 유효 부하 = 체중 − 보조중량 */
+const effKg = (s, assist, bw) => (assist ? Math.max(0, bw - setKg(s)) : setKg(s));
 const showW = (s, u) => {
   if (!s || s.w === "" || s.w == null) return "";
   const su = s.u || "kg";
@@ -600,7 +605,7 @@ label.tp-btn input[type=file] { display:none; }
 /* ══════════════════  공통  ══════════════════ */
 
 const lookupEx = (id, custom) =>
-  LIBMAP[id] || (custom || []).find((c) => c.id === id) || { id, name: id, pattern: "", inc: 2.5, bw: false };
+  LIBMAP[id] || (custom || []).find((c) => c.id === id) || { id, name: id, pattern: "", inc: 2.5, bw: false, assist: false };
 
 /* 종목 선택 시트 */
 function Picker({ current, custom, onPick, onClose, onRevert, title, hint, taken }) {
@@ -830,7 +835,7 @@ function Today({ data, patch, tenK, date, setDate, startRest }) {
     return session.ex.map((s) => {
       const sw = swap[s.id];
       const base = sw
-        ? (() => { const l = lookupEx(sw, data.custom); return { ...s, id: l.id, name: l.name, inc: l.inc, bw: l.bw, swapped: true }; })()
+        ? (() => { const l = lookupEx(sw, data.custom); return { ...s, id: l.id, name: l.name, inc: l.inc, bw: l.bw, assist: l.assist, swapped: true }; })()
         : { ...s };
       /* T1 은 세트마다 목표가 달라 웨이브를 통째로 넘긴다 */
       const wave = base.tier === "T1" ? (deload ? T1_DELOAD.map((i) => T1_WAVE[i]) : T1_WAVE) : null;
@@ -931,7 +936,8 @@ function Today({ data, patch, tenK, date, setDate, startRest }) {
         <Exercise key={e.slotId} ex={e} log={liftLog[e.id] || []} date={date} allLog={data.log}
           unit={unitOf(data, e.id)} onChange={setVal} onSwap={() => setPick(e.slotId)} startRest={startRest}
           autoRest={data.settings.autoRest} onAddSet={addSet} onRemoveSet={removeSet}
-          tm={tmOf(data, e.id)} onSetTm={setTm} tmSrc={(data.tmSrc || {})[e.id] || ""} />
+          tm={tmOf(data, e.id)} onSetTm={setTm} tmSrc={(data.tmSrc || {})[e.id] || ""}
+          bodyWeight={bwKgOf(data) ? nice(fromKg(bwKgOf(data), unitOf(data, e.id)), unitOf(data, e.id)) : 0} />
       ))}
 
       <div className={`tp-row run ${day.run && day.run.d ? "done" : ""}`}>
@@ -976,12 +982,19 @@ function Today({ data, patch, tenK, date, setDate, startRest }) {
   );
 }
 
-function Exercise({ ex, log, date, allLog, unit, onChange, onSwap, startRest, autoRest, onAddSet, onRemoveSet, tm, onSetTm, tmSrc }) {
+function Exercise({ ex, log, date, allLog, unit, onChange, onSwap, startRest, autoRest, onAddSet, onRemoveSet, tm, onSetTm, tmSrc, bodyWeight }) {
   const U = UL(unit);
   const count = Math.max(ex.sets, log.length);
   const wave = ex.wave;
-  /* T1 은 세트마다 목표 중량이 다르다. 원판 단위로 반올림해서 보여준다 */
-  const target = (i) => (wave && tm > 0 && wave[i] ? roundTo(tm * wave[i].pct, ex.inc) : null);
+  /* T1 은 세트마다 목표 중량이 다르다. 원판 단위로 반올림해서 보여준다.
+     어시스트 머신은 숫자가 클수록 쉬워지므로 체중에서 목표 유효부하를 빼서 보조중량을 낸다 */
+  const target = (i) => {
+    if (!wave || !wave[i] || tm <= 0) return null;
+    const eff = tm * wave[i].pct;
+    if (!ex.assist) return roundTo(eff, ex.inc);
+    if (!bodyWeight) return null;
+    return Math.max(0, roundTo(bodyWeight - eff, ex.inc));
+  };
   const [confirmDel, setConfirmDel] = useState(false);
   useEffect(() => { setConfirmDel(false); }, [count, date]);
 
@@ -1076,7 +1089,9 @@ function Exercise({ ex, log, date, allLog, unit, onChange, onSwap, startRest, au
         )}
       </div>
       {wave ? (
-        tm > 0 ? (
+        ex.assist && !bodyWeight ? (
+          <div className="tp-prev">어시스트 머신은 체중을 알아야 보조중량을 계산합니다. 설정 탭에서 체중을 먼저 넣으세요.</div>
+        ) : tm > 0 ? (
           <div className="tp-prev">
             훈련 맥스 <b>{tm}{U}</b> 기준
             {amrap && <> · 직전 AMRAP <b>{amrap.reps}회</b></>}
@@ -1326,15 +1341,19 @@ function History({ data, unit }) {
   /* 종목별 세션 요약을 한 번에 만든다 */
   const byEx = useMemo(() => {
     const m = {};
+    const bw = bwKgOf(data);
     Object.keys(data.log).sort().forEach((d) => {
       const lift = data.log[d].lift;
       if (!lift) return;
       Object.entries(lift).forEach(([id, sets]) => {
         const done = sets.filter((s) => s && s.d && s.w !== "" && s.r);
         if (!done.length) return;
-        const bestKg = Math.max(...done.map((s) => e1rm(setKg(s), Number(s.r))));
-        const topKg = Math.max(...done.map((s) => setKg(s)));
-        const volKg = done.reduce((a, s) => a + setKg(s) * Number(s.r), 0);
+        /* 보조중량을 그대로 쓰면 강해질수록 수치가 내려간다 */
+        const assist = !!lookupEx(id, data.custom).assist;
+        const load = (s) => effKg(s, assist, bw);
+        const bestKg = Math.max(...done.map((s) => e1rm(load(s), Number(s.r))));
+        const topKg = Math.max(...done.map(load));
+        const volKg = done.reduce((a, s) => a + load(s) * Number(s.r), 0);
         const reps = done.reduce((a, s) => a + Number(s.r), 0);
         /* Epley 공식은 12회를 넘어가면 오차가 커진다 */
         const hiRep = done.some((s) => Number(s.r) > 12);
@@ -1566,8 +1585,8 @@ function Program({ data, patch }) {
       } else { id = res.id; l = lookupEx(id, d.custom); }
       const arr = d.program.sessions[sid].ex;
       const inc = convertInc(l.inc, "kg", unitOf(d, id));
-      if (pick.add) arr.push({ id, tier: "T3", name: l.name, pattern: l.pattern, inc, bw: l.bw, sets: 3, lo: 8, hi: 12, rest: 120, note: "" });
-      else arr[pick.idx] = { ...arr[pick.idx], id, name: l.name, pattern: l.pattern, inc, bw: l.bw };
+      if (pick.add) arr.push({ id, tier: "T3", name: l.name, pattern: l.pattern, inc, bw: l.bw, assist: l.assist, sets: 3, lo: 8, hi: 12, rest: 120, note: "" });
+      else arr[pick.idx] = { ...arr[pick.idx], id, name: l.name, pattern: l.pattern, inc, bw: l.bw, assist: l.assist };
     });
     setPick(null);
   };
