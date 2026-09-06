@@ -79,62 +79,76 @@ const LIBMAP = Object.fromEntries(EXLIB.map((e) => [e.id, e]));
 
 /* ══════════════════  기본 프로그램  ══════════════════ */
 
-const slot = (id, sets, lo, hi, rest, note) => {
-  const l = LIBMAP[id];
-  return { id, name: l.name, pattern: l.pattern, inc: l.inc, bw: l.bw, sets, lo, hi, rest, note: note || "" };
+/* T1 은 nSuns 5/3/1 의 9세트 웨이브. pct 는 훈련 맥스(TM) 대비 비율이고
+   3번째 세트(1+)의 AMRAP 개수로 다음 TM 증량폭을 정한다 */
+const T1_WAVE = [
+  { pct: 0.75, r: 5 }, { pct: 0.85, r: 3 }, { pct: 0.95, r: 1, amrap: true },
+  { pct: 0.90, r: 3 }, { pct: 0.85, r: 3 }, { pct: 0.80, r: 3 },
+  { pct: 0.75, r: 5 }, { pct: 0.70, r: 5 }, { pct: 0.65, r: 5, amrap: true },
+];
+const T1_AMRAP = 2;
+/* 감량 주에는 최대 강도 구간(95~80%)을 통째로 빼고 백오프만 남긴다 */
+const T1_DELOAD = [0, 1, 6, 7, 8];
+
+const TIERS = {
+  T1: { label: "T1", desc: "메인 · 고중량 피라미드" },
+  T2: { label: "T2", desc: "근매스 · 10–15회 중량" },
+  T3: { label: "T3", desc: "고반복 보조" },
 };
+
+const slot = (tier, id, sets, lo, hi, rest, note) => {
+  const l = LIBMAP[id];
+  return { id, tier, name: l.name, pattern: l.pattern, inc: l.inc, bw: l.bw, sets, lo, hi, rest, note: note || "" };
+};
+const t1 = (id, rest, note) => slot("T1", id, T1_WAVE.length, 1, 5, rest, note);
 
 const DEFAULT_PROGRAM = () => ({
   sessions: {
     upperA: {
-      name: "상체 A", sub: "푸시 · 스트렝스", ex: [
-        slot("bench", 4, 4, 6, 180, "RPE 7–8"),
-        slot("ohp", 3, 6, 8, 150),
-        slot("incdb", 3, 8, 10, 120, "덤벨 한쪽 중량"),
-        slot("latraise", 3, 12, 15, 60),
-        slot("ohtri", 3, 10, 12, 75),
+      name: "상체 A", sub: "가슴 · 수평 밀기", ex: [
+        t1("bench", 210, "3번째·9번째 세트는 AMRAP"),
+        slot("T2", "incdb", 3, 10, 12, 120, "덤벨 한쪽 중량"),
+        slot("T2", "cablerow", 3, 10, 12, 120),
+        slot("T3", "latraise", 3, 15, 20, 60),
+        slot("T3", "pushdown", 2, 12, 15, 60),
       ],
     },
     upperB: {
-      name: "상체 B", sub: "풀 · 스트렝스", ex: [
-        slot("pullup", 4, 5, 8, 180, "추가 중량만 입력"),
-        slot("brow", 4, 6, 8, 150),
-        slot("csrow", 3, 10, 12, 120),
-        slot("facepull", 3, 15, 15, 60),
-        slot("bcurl", 3, 8, 10, 90),
+      name: "상체 B", sub: "등 너비 · 수직 당기기", ex: [
+        t1("latpull", 180),
+        slot("T2", "seatdbp", 3, 10, 12, 120),
+        slot("T2", "cfly", 3, 12, 15, 75),
+        slot("T3", "reardelt", 3, 15, 20, 60),
+        slot("T3", "inccurl", 2, 12, 15, 60),
       ],
     },
     lower: {
       name: "하체", sub: "머신 중심", ex: [
-        slot("hack", 4, 5, 8, 210, "스트렝스 앵커 · RPE 8"),
-        slot("legpress", 3, 8, 12, 150, "발 낮게 = 사두 강조"),
-        slot("seatcurl", 3, 8, 10, 120, "무겁게"),
-        slot("lyingcurl", 3, 12, 15, 90),
-        slot("legext", 3, 12, 15, 75, "마지막 세트 부분반복"),
-        slot("backext", 3, 12, 15, 90, "힌지 패턴 보완"),
-        slot("abduct", 3, 15, 20, 60, "부상 예방 · 생략 금지"),
-        slot("calfst", 4, 8, 12, 90),
-        slot("calfseat", 2, 15, 20, 60),
-        slot("legraise", 3, 10, 10, 60, "맨몸 · 중량 0"),
+        t1("hack", 240, "스트렝스 앵커"),
+        slot("T2", "seatcurl", 3, 10, 12, 120, "무겁게"),
+        slot("T2", "legpress", 3, 12, 15, 120, "발 낮게 = 사두 강조"),
+        slot("T3", "legext", 3, 15, 20, 75),
+        slot("T3", "abduct", 3, 15, 20, 60, "부상 예방 · 생략 금지"),
+        slot("T3", "calfst", 3, 10, 15, 90),
+        slot("T3", "legraise", 3, 10, 15, 60, "맨몸 · 중량 0"),
       ],
     },
     upperC: {
-      name: "상체 C", sub: "푸시 · 볼륨", ex: [
-        slot("incbar", 4, 8, 10, 150),
-        slot("seatdbp", 3, 10, 12, 120),
-        slot("cfly", 3, 12, 15, 75),
-        slot("latraise", 4, 12, 20, 60),
-        slot("pushdown", 3, 12, 15, 60),
+      name: "상체 C", sub: "어깨 · 수직 밀기", ex: [
+        t1("ohp", 180),
+        slot("T2", "cgbench", 3, 8, 12, 120),
+        slot("T2", "csrow", 3, 10, 12, 120),
+        slot("T3", "cablelat", 3, 15, 20, 60),
+        slot("T3", "cablecurl", 2, 12, 15, 60),
       ],
     },
     upperD: {
-      name: "상체 D", sub: "풀 · 볼륨", ex: [
-        slot("latpull", 4, 10, 12, 120),
-        slot("cablerow", 4, 10, 12, 120),
-        slot("sapull", 3, 12, 15, 60),
-        slot("reardelt", 3, 15, 20, 60),
-        slot("inccurl", 3, 12, 15, 60),
-        slot("nordic", 2, 6, 8, 120, "신장성 부하 · 가볍게"),
+      name: "상체 D", sub: "등 두께 · 수평 당기기", ex: [
+        t1("brow", 180),
+        slot("T2", "incbar", 3, 8, 12, 120),
+        slot("T2", "pullup", 3, 6, 10, 120, "추가 중량만 입력"),
+        slot("T3", "facepull", 3, 15, 20, 60),
+        slot("T3", "ohtri", 2, 12, 15, 60),
       ],
     },
   },
@@ -266,6 +280,12 @@ const convertInc = (v, from, to) => {
   return Math.round((to === "lb" ? v * LB : v / LB) / step) * step;
 };
 const unitOf = (d, id) => (d.units && d.units[id]) || d.settings.unit || "kg";
+
+/* 훈련 맥스는 그 종목의 단위로 저장한다 */
+const tmOf = (d, id) => Number((d.tm && d.tm[id]) || 0);
+const roundTo = (v, step) => (step > 0 ? Math.round(v / step) * step : Math.round(v * 2) / 2);
+/* AMRAP 개수가 많을수록 크게 올린다. 증량 폭은 그 종목의 원판 단위(inc)를 배수로 쓴다 */
+const tmBump = (reps, inc) => (reps <= 1 ? 0 : reps <= 3 ? inc : reps <= 5 ? inc * 2 : inc * 3);
 const showW = (s, u) => {
   if (!s || s.w === "" || s.w == null) return "";
   const su = s.u || "kg";
@@ -281,6 +301,8 @@ const BLANK = () => ({
   program: DEFAULT_PROGRAM(),
   custom: [],
   units: {},
+  tm: {},
+  tmSrc: {},
   log: {},
   tt: [{ date: "2026-09-01", sec: 3900 }],
 });
@@ -296,6 +318,8 @@ const normalize = (s) => {
     program: s.program && s.program.sessions ? s.program : b.program,
     custom: Array.isArray(s.custom) ? s.custom : [],
     units: s.units && typeof s.units === "object" ? s.units : {},
+    tm: s.tm && typeof s.tm === "object" ? s.tm : {},
+    tmSrc: s.tmSrc && typeof s.tmSrc === "object" ? s.tmSrc : {},
     log: s.log && typeof s.log === "object" ? s.log : {},
     tt: Array.isArray(s.tt) && s.tt.length ? s.tt : b.tt,
   };
@@ -380,6 +404,16 @@ const CSS = `
 .tp-exname { font-size:17px; font-weight:600; line-height:1.3; text-align:left; background:none; border:none; color:inherit; padding:0; display:flex; align-items:baseline; gap:7px; flex-wrap:wrap; }
 .tp-exname:hover { color:var(--pulse); }
 .tp-swapped { font-size:11.5px; color:var(--pulse); border:1px solid var(--pulse); border-radius:4px; padding:1px 5px; font-weight:600; }
+.tp-tier { font-family:'Barlow Condensed',sans-serif; font-size:12.5px; font-weight:700; border-radius:4px; padding:1px 6px; flex-shrink:0; }
+.tp-tier.T1 { background:var(--pulse); color:var(--ink); }
+.tp-tier.T2 { background:var(--iron); color:var(--ink); }
+.tp-tier.T3 { border:1px solid var(--dim); color:var(--muted); }
+.tp-setno.amrap { color:var(--pulse); font-weight:700; }
+.tp-tmup { background:none; border:1px solid var(--pulse); color:var(--pulse); border-radius:5px; padding:3px 9px; font-size:12.5px; font-weight:600; }
+.tp-tierseg { display:flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; flex-shrink:0; }
+.tp-tierseg button { background:var(--panel2); border:none; color:var(--muted); padding:0 9px; height:30px; font-size:12.5px; font-weight:700; font-family:'Barlow Condensed',sans-serif; }
+.tp-tierseg button + button { border-left:1px solid var(--line); }
+.tp-tierseg button.on { background:var(--iron); color:var(--ink); }
 .tp-scheme { font-family:'Barlow Condensed',sans-serif; font-size:17px; color:var(--muted); white-space:nowrap; font-weight:600; flex-shrink:0; }
 .tp-meta { font-size:12.5px; color:var(--dim); margin-top:4px; display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
 .tp-meta button { background:none; border:none; color:var(--dim); padding:0; font-size:12.5px; text-decoration:underline; text-underline-offset:2px; }
@@ -740,11 +774,14 @@ function Today({ data, patch, tenK, date, setDate, startRest }) {
   const exList = useMemo(() => {
     if (!session) return [];
     return session.ex.map((s) => {
-      const sets = deload ? Math.max(1, Math.ceil(s.sets / 2)) : s.sets;
       const sw = swap[s.id];
-      if (!sw) return { ...s, sets, slotId: s.id };
-      const l = lookupEx(sw, data.custom);
-      return { ...s, sets, slotId: s.id, id: l.id, name: l.name, inc: l.inc, bw: l.bw, swapped: true };
+      const base = sw
+        ? (() => { const l = lookupEx(sw, data.custom); return { ...s, id: l.id, name: l.name, inc: l.inc, bw: l.bw, swapped: true }; })()
+        : { ...s };
+      /* T1 은 세트마다 목표가 달라 웨이브를 통째로 넘긴다 */
+      const wave = base.tier === "T1" ? (deload ? T1_DELOAD.map((i) => T1_WAVE[i]) : T1_WAVE) : null;
+      const sets = wave ? wave.length : (deload ? Math.max(1, Math.ceil(s.sets / 2)) : s.sets);
+      return { ...base, sets, wave, slotId: s.id };
     });
   }, [session, swap, deload, data.custom]);
 
@@ -773,6 +810,11 @@ function Today({ data, patch, tenK, date, setDate, startRest }) {
   const removeSet = (exId, planned) => patch((d) => {
     const arr = ((d.log[date] || {}).lift || {})[exId];
     if (arr && arr.length > planned) arr.pop();
+  });
+  /* 같은 세션 기록으로 두 번 올리지 못하게 근거 날짜를 함께 남긴다 */
+  const setTm = (exId, v, src) => patch((d) => {
+    d.tm = d.tm || {}; d.tm[exId] = v;
+    if (src) { d.tmSrc = d.tmSrc || {}; d.tmSrc[exId] = src; }
   });
 
   const runSet = (field, v) => patch((d) => {
@@ -828,13 +870,14 @@ function Today({ data, patch, tenK, date, setDate, startRest }) {
         </div>
       </header>
 
-      {deload && session && <p className="tp-banner iron">디로드 주간. 중량은 그대로 두고 세트를 절반으로 줄입니다. 실패 지점까지 밀지 마세요.</p>}
+      {deload && session && <p className="tp-banner iron">디로드 주간. T1은 최대 강도 구간을 빼고 백오프만, T2·T3는 세트를 절반으로 줄입니다. 실패 지점까지 밀지 마세요.</p>}
       {run.quality && <p className="tp-banner hot">질 높은 러닝 세션. 웨이트와 최소 6시간 간격을 두고, 가능하면 러닝을 먼저 하세요.</p>}
 
       {exList.map((e) => (
         <Exercise key={e.slotId} ex={e} log={liftLog[e.id] || []} date={date} allLog={data.log}
           unit={unitOf(data, e.id)} onChange={setVal} onSwap={() => setPick(e.slotId)} startRest={startRest}
-          autoRest={data.settings.autoRest} onAddSet={addSet} onRemoveSet={removeSet} />
+          autoRest={data.settings.autoRest} onAddSet={addSet} onRemoveSet={removeSet}
+          tm={tmOf(data, e.id)} onSetTm={setTm} tmSrc={(data.tmSrc || {})[e.id] || ""} />
       ))}
 
       <div className={`tp-row run ${day.run && day.run.d ? "done" : ""}`}>
@@ -879,9 +922,12 @@ function Today({ data, patch, tenK, date, setDate, startRest }) {
   );
 }
 
-function Exercise({ ex, log, date, allLog, unit, onChange, onSwap, startRest, autoRest, onAddSet, onRemoveSet }) {
+function Exercise({ ex, log, date, allLog, unit, onChange, onSwap, startRest, autoRest, onAddSet, onRemoveSet, tm, onSetTm, tmSrc }) {
   const U = UL(unit);
   const count = Math.max(ex.sets, log.length);
+  const wave = ex.wave;
+  /* T1 은 세트마다 목표 중량이 다르다. 원판 단위로 반올림해서 보여준다 */
+  const target = (i) => (wave && tm > 0 && wave[i] ? roundTo(tm * wave[i].pct, ex.inc) : null);
   const [confirmDel, setConfirmDel] = useState(false);
   useEffect(() => { setConfirmDel(false); }, [count, date]);
 
@@ -892,8 +938,9 @@ function Exercise({ ex, log, date, allLog, unit, onChange, onSwap, startRest, au
   const prev = useMemo(() => {
     const ds = Object.keys(allLog).filter((d) => d < date && allLog[d].lift && allLog[d].lift[ex.id]).sort().reverse();
     for (const d of ds) {
-      const sets = allLog[d].lift[ex.id].filter((s) => s && s.d && s.r);
-      if (sets.length) return { date: d, sets };
+      const all = allLog[d].lift[ex.id];
+      const sets = all.filter((s) => s && s.d && s.r);
+      if (sets.length) return { date: d, sets, all };
     }
     return null;
   }, [allLog, date, ex.id]);
@@ -904,6 +951,15 @@ function Exercise({ ex, log, date, allLog, unit, onChange, onSwap, startRest, au
     const top = prev.sets.length >= ex.sets && prev.sets.every((s) => Number(s.r) >= ex.hi);
     return top ? { w: prevW + ex.inc, r: ex.lo, up: true } : { w: prevW, up: false };
   }, [prev, prevW, ex, unit]);
+
+  /* 웨이브를 온전히 다 한 날만 증량 근거로 쓴다. 감량 주 기록으로 올리면 안 된다 */
+  const amrap = useMemo(() => {
+    if (!wave || !prev || prev.all.length < T1_WAVE.length) return null;
+    const set = prev.all[T1_AMRAP];
+    if (!set || !set.d || !set.r) return null;
+    const reps = Number(set.r);
+    return { reps, bump: tmBump(reps, ex.inc) };
+  }, [wave, prev, ex.inc]);
 
   const doneCount = log.filter((s) => s && s.d).length;
 
@@ -916,11 +972,12 @@ function Exercise({ ex, log, date, allLog, unit, onChange, onSwap, startRest, au
     <div className={`tp-row ${doneCount === count ? "done" : ""}`}>
       <div className="tp-exhead">
         <button className="tp-exname" onClick={onSwap} aria-label={`${ex.name} 종목 바꾸기`}>
+          {ex.tier && <span className={`tp-tier ${ex.tier}`}>{ex.tier}</span>}
           {ex.name}
           {ex.swapped && <span className="tp-swapped">대체</span>}
         </button>
         <span className="tp-scheme">
-          {ex.lo === ex.hi ? ex.lo : `${ex.lo}–${ex.hi}`} × {ex.sets}
+          {wave ? `피라미드 × ${ex.sets}` : `${ex.lo === ex.hi ? ex.lo : `${ex.lo}–${ex.hi}`} × ${ex.sets}`}
           {count > ex.sets && <span style={{ color: "var(--pulse)" }}> +{count - ex.sets}</span>}
         </span>
       </div>
@@ -933,16 +990,18 @@ function Exercise({ ex, log, date, allLog, unit, onChange, onSwap, startRest, au
           const s = log[i] || { w: "", r: "", d: false };
           return (
             <div className="tp-set" key={i}>
-              <span className="tp-setno">{i + 1}</span>
+              <span className={`tp-setno ${wave && wave[i] && wave[i].amrap ? "amrap" : ""}`}>{i + 1}</span>
               <span className="tp-fld">
                 <input type="number" step={unit === "lb" ? "2.5" : "0.5"} inputMode="decimal"
-                  placeholder={suggest ? String(suggest.w) : U} value={showW(s, unit)}
+                  placeholder={target(i) != null ? String(target(i)) : (suggest ? String(suggest.w) : U)}
+                  value={showW(s, unit)}
                   onChange={(e) => onChange(ex.id, i, "w", e.target.value)} aria-label={`${i + 1}세트 중량`} />
-                <span className="tp-unit">{U}</span>
+                <span className="tp-unit">{wave && wave[i] ? `${Math.round(wave[i].pct * 100)}%` : U}</span>
               </span>
               <span className="tp-fld">
                 <input type="number" inputMode="numeric"
-                  placeholder={suggest && suggest.r ? String(suggest.r) : String(ex.lo)} value={s.r}
+                  placeholder={wave && wave[i] ? `${wave[i].r}${wave[i].amrap ? "+" : ""}` : (suggest && suggest.r ? String(suggest.r) : String(ex.lo))}
+                  value={s.r}
                   onChange={(e) => onChange(ex.id, i, "r", e.target.value)} aria-label={`${i + 1}세트 반복`} />
                 <span className="tp-unit">회</span>
               </span>
@@ -962,7 +1021,23 @@ function Exercise({ ex, log, date, allLog, unit, onChange, onSwap, startRest, au
             }}>{confirmDel ? "기록이 지워집니다" : "마지막 세트 빼기"}</button>
         )}
       </div>
-      {prev ? (
+      {wave ? (
+        tm > 0 ? (
+          <div className="tp-prev">
+            훈련 맥스 <b>{tm}{U}</b> 기준
+            {amrap && <> · 직전 AMRAP <b>{amrap.reps}회</b></>}
+            {amrap && amrap.bump > 0 && (tmSrc === prev.date
+              ? <> → <b>반영 완료</b></>
+              : <> → <button className="tp-tmup" onClick={() => onSetTm(ex.id, tm + amrap.bump, prev.date)}>
+                  TM {tm + amrap.bump}{U}로 올리기
+                </button></>
+            )}
+            {amrap && amrap.bump === 0 && <> → <b>TM 유지</b></>}
+          </div>
+        ) : (
+          <div className="tp-prev">훈련 맥스를 먼저 정하세요. 구성 탭에서 이 종목의 TM을 넣으면 세트별 목표 중량이 계산됩니다.</div>
+        )
+      ) : prev ? (
         <div className="tp-prev">
           직전 {parse(prev.date).getMonth() + 1}/{parse(prev.date).getDate()} · {prevW}{U} × {prev.sets.map((s) => s.r).join(", ")}
           {suggest && suggest.up && <> → 이번엔 <b>{suggest.w}{U} · {ex.lo}회부터</b></>}
@@ -1404,6 +1479,12 @@ function Program({ data, patch }) {
   const s = data.program.sessions[sid];
 
   const upd = (idx, field, v) => patch((d) => { d.program.sessions[sid].ex[idx][field] = v; });
+  /* T1 로 바꾸면 세트 수가 웨이브 길이로 고정된다 */
+  const setTier = (idx, tier) => patch((d) => {
+    const x = d.program.sessions[sid].ex[idx];
+    x.tier = tier;
+    if (tier === "T1") { x.sets = T1_WAVE.length; x.lo = 1; x.hi = 5; }
+  });
   /* 단위는 종목 단위로 관리하므로 다른 세션에 든 같은 종목의 증량 폭도 함께 환산한다 */
   const setExUnit = (id, u) => patch((d) => {
     const from = unitOf(d, id);
@@ -1431,7 +1512,7 @@ function Program({ data, patch }) {
       } else { id = res.id; l = lookupEx(id, d.custom); }
       const arr = d.program.sessions[sid].ex;
       const inc = convertInc(l.inc, "kg", unitOf(d, id));
-      if (pick.add) arr.push({ id, name: l.name, pattern: l.pattern, inc, bw: l.bw, sets: 3, lo: 8, hi: 12, rest: 120, note: "" });
+      if (pick.add) arr.push({ id, tier: "T3", name: l.name, pattern: l.pattern, inc, bw: l.bw, sets: 3, lo: 8, hi: 12, rest: 120, note: "" });
       else arr[pick.idx] = { ...arr[pick.idx], id, name: l.name, pattern: l.pattern, inc, bw: l.bw };
     });
     setPick(null);
@@ -1481,13 +1562,32 @@ function Program({ data, patch }) {
             <button className="tp-mini" onClick={() => move(i, 1)} aria-label="아래로">↓</button>
             <button className="tp-mini" onClick={() => del(i)} aria-label="삭제">×</button>
           </div>
+          <div className="tp-tierseg" style={{ marginTop: 9, width: "fit-content" }}>
+            {Object.keys(TIERS).map((k) => (
+              <button key={k} className={(e.tier || "T3") === k ? "on" : ""} aria-pressed={(e.tier || "T3") === k}
+                title={TIERS[k].desc} onClick={() => setTier(i, k)}>{k}</button>
+            ))}
+          </div>
           <div className="tp-nums">
-            <label className="tp-num"><span>세트</span>
-              <input type="number" min="1" value={e.sets} onChange={(ev) => upd(i, "sets", Math.max(1, Number(ev.target.value) || 1))} /></label>
-            <label className="tp-num"><span>최소 반복</span>
-              <input type="number" min="1" value={e.lo} onChange={(ev) => upd(i, "lo", Number(ev.target.value) || 1)} /></label>
-            <label className="tp-num"><span>최대 반복</span>
-              <input type="number" min="1" value={e.hi} onChange={(ev) => upd(i, "hi", Number(ev.target.value) || 1)} /></label>
+            {e.tier === "T1" ? (
+              <>
+                <label className="tp-num" style={{ flex: 2 }}><span>훈련 맥스 {UL(eu)}</span>
+                  <input type="number" min="0" step={eu === "lb" ? "5" : "2.5"} value={tmOf(data, e.id) || ""}
+                    placeholder="1RM의 90%"
+                    onChange={(ev) => patch((d) => { d.tm = d.tm || {}; d.tm[e.id] = Math.max(0, Number(ev.target.value) || 0); })} /></label>
+                <label className="tp-num"><span>세트</span>
+                  <input type="number" value={T1_WAVE.length} disabled /></label>
+              </>
+            ) : (
+              <>
+                <label className="tp-num"><span>세트</span>
+                  <input type="number" min="1" value={e.sets} onChange={(ev) => upd(i, "sets", Math.max(1, Number(ev.target.value) || 1))} /></label>
+                <label className="tp-num"><span>최소 반복</span>
+                  <input type="number" min="1" value={e.lo} onChange={(ev) => upd(i, "lo", Number(ev.target.value) || 1)} /></label>
+                <label className="tp-num"><span>최대 반복</span>
+                  <input type="number" min="1" value={e.hi} onChange={(ev) => upd(i, "hi", Number(ev.target.value) || 1)} /></label>
+              </>
+            )}
             <label className="tp-num"><span>휴식 초</span>
               <input type="number" min="0" step="15" value={e.rest} onChange={(ev) => upd(i, "rest", Math.max(0, Number(ev.target.value) || 0))} /></label>
             <label className="tp-num"><span>증량 {UL(eu)}</span>
